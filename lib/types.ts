@@ -1,5 +1,76 @@
-export type SongCategory = 'HINDI' | 'ENGLISH';
+export type GamePhase = 'LOBBY' | 'PREVIEW' | 'GUESSING' | 'REVEAL' | 'PODIUM';
 
+export interface GameSong {
+  id: string;
+  title: string;
+  artist: string;
+  album?: string;
+  year?: number;
+  audioUrl: string; // 30-sec preview stream (Spotify or iTunes resolved)
+  coverUrl?: string;
+  spotifyUri?: string;
+  spotifyUrl?: string;
+  owners: string[]; // List of player IDs who have this in their top 30
+}
+
+export interface GamePlayer {
+  id: string;
+  name: string;
+  avatar: string;
+  isHost: boolean;
+  isReady: boolean;
+  spotifyConnected: boolean;
+  spotifyUsername?: string;
+  topSongs: GameSong[];
+  score: number;
+  currentStreak: number;
+  lastGuess?: PlayerGuess;
+}
+
+export interface PlayerGuess {
+  selectedPlayerIds: string[]; // multi-choice: can select 1 or more suspects
+  timeTakenSec: number;
+  submittedAt: number;
+  isCorrect: boolean; // true if selected at least one actual owner and no incorrect persons
+  pointsEarned: number;
+  isMultiOwnerBonus: boolean; // 2x multiplier
+}
+
+export interface GameRound {
+  index: number;
+  totalRounds: number;
+  song: GameSong;
+  startTime: number;
+  durationSec: number;
+  isCompleted: boolean;
+}
+
+export interface GameSettings {
+  roundDurationSec: number; // e.g. 20s
+  totalRounds: number; // e.g. 10 or all
+  hideSongTitleDuringGuess: boolean;
+  allowMultiSelect: boolean;
+}
+
+export interface GameRoom {
+  code: string;
+  hostId: string;
+  createdAt: number;
+  phase: GamePhase;
+  settings: GameSettings;
+  players: Record<string, GamePlayer>;
+  playlist: GameSong[];
+  currentRoundIndex: number;
+  currentRound?: GameRound;
+  roundHistory: {
+    roundIndex: number;
+    song: GameSong;
+    guesses: Record<string, PlayerGuess>;
+  }[];
+}
+
+// Backward compatibility with previous types
+export type SongCategory = 'HINDI' | 'ENGLISH';
 export type PopularityTier = 'Q1' | 'Q2' | 'Q3' | 'Q4';
 
 export interface Song {
@@ -10,7 +81,7 @@ export interface Song {
   year?: number;
   audioUrl: string;
   coverUrl?: string;
-  popularity?: number; // 0 to 100
+  popularity?: number;
   tier?: PopularityTier;
   category: SongCategory;
   spotifyUri?: string;
@@ -25,7 +96,7 @@ export interface GuessAttempt {
   song?: Song;
 }
 
-export const GUESS_DURATIONS = [0.1, 0.5, 2.0, 4.0, 8.0, 16.0]; // seconds
+export const GUESS_DURATIONS = [0.1, 0.5, 2.0, 4.0, 8.0, 16.0];
 
 export interface SpotifyUser {
   id: string;
@@ -41,14 +112,6 @@ export interface GroupRoom {
   users: SpotifyUser[];
   playlist: Song[];
   activeSongIndex: number;
-}
-
-export interface DailyCategoryProgress {
-  date: string; // YYYY-MM-DD
-  category: SongCategory;
-  completedSongIds: string[];
-  songsWon: number;
-  isFinished: boolean;
 }
 
 export function getQuartileBadge(popularity: number = 80): { tier: PopularityTier; label: string; color: string } {

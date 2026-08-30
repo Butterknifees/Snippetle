@@ -1,433 +1,304 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Navbar } from '../components/Navbar';
-import { AudioPlayerControls } from '../components/AudioPlayerControls';
-import { GuessTimeline } from '../components/GuessTimeline';
-import { SongSearchInput } from '../components/SongSearchInput';
-import { SpotifyGroupModal } from '../components/SpotifyGroupModal';
-import { GameResultModal } from '../components/GameResultModal';
-import { StatsModal } from '../components/StatsModal';
-import { Song, GuessAttempt, GUESS_DURATIONS, GroupRoom, SongCategory, AttemptStatus } from '../lib/types';
-import { getDailyThreeSongs, getSongsByCategory } from '../lib/hindiSongs';
-import { AudioEngine } from '../lib/audioEngine';
-import { getSavedRoom, createRoom } from '../lib/roomStore';
-import { MOCK_SPOTIFY_USERS } from '../lib/spotify';
-import { Users, Clock, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createGameRoom } from '../lib/roomEngine';
+import { GamePlayer } from '../lib/types';
+import { PRESET_TASTE_PROFILES, generateSongsFromProfile } from '../lib/mockProfiles';
+import { CloudSyncModal } from '../components/game/CloudSyncModal';
+import { 
+  Music, 
+  Users, 
+  Sparkles, 
+  ArrowRight, 
+  Play, 
+  Zap, 
+  Flame, 
+  CheckCircle2, 
+  Headphones, 
+  Radio, 
+  ShieldCheck, 
+  Award,
+  Globe
+} from 'lucide-react';
 
-function checkArtistOverlap(artist1: string, artist2: string): boolean {
-  const a1List = artist1.toLowerCase().split(/[,&]/).map(s => s.trim()).filter(Boolean);
-  const a2List = artist2.toLowerCase().split(/[,&]/).map(s => s.trim()).filter(Boolean);
-  return a1List.some(a1 => a2List.some(a2 => a1.includes(a2) || a2.includes(a1)));
-}
+export default function HomePage() {
+  const router = useRouter();
+  const [joinCode, setJoinCode] = useState('');
+  const [selectedProfileId, setSelectedProfileId] = useState(PRESET_TASTE_PROFILES[0].id);
+  const [playerName, setPlayerName] = useState(PRESET_TASTE_PROFILES[0].name.split(' ')[0]);
+  const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
 
-export default function Home() {
-  const [category, setCategory] = useState<SongCategory>('HINDI');
-  const [mode, setMode] = useState<'DAILY' | 'GROUP'>('DAILY');
-  
-  // Daily 3-Song Progress State
-  const [dailyThreeSongs, setDailyThreeSongs] = useState<Song[]>([]);
-  const [dailySongIndex, setDailySongIndex] = useState<number>(0);
-  const [completedDailySongIds, setCompletedDailySongIds] = useState<string[]>([]);
-  const [isDailyCompleted, setIsDailyCompleted] = useState<boolean>(false);
-  const [isFreePlay, setIsFreePlay] = useState<boolean>(false);
+  const activeProfile = PRESET_TASTE_PROFILES.find(p => p.id === selectedProfileId) || PRESET_TASTE_PROFILES[0];
 
-  const [activeSong, setActiveSong] = useState<Song | null>(null);
-  const [currentStep, setCurrentStep] = useState<number>(0);
-  const [attempts, setAttempts] = useState<GuessAttempt[]>([]);
-  const [isGameOver, setIsGameOver] = useState<boolean>(false);
-  const [isWon, setIsWon] = useState<boolean>(false);
-
-  // Modals & Audio state
-  const [isGroupModalOpen, setIsGroupModalOpen] = useState<boolean>(false);
-  const [isResultModalOpen, setIsResultModalOpen] = useState<boolean>(false);
-  const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
-  const [room, setRoom] = useState<GroupRoom | null>(null);
-
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [isPlayingFull, setIsPlayingFull] = useState<boolean>(false);
-  const [playbackProgress, setPlaybackProgress] = useState<number>(0);
-  const [isMuted, setIsMuted] = useState<boolean>(false);
-
-  // Stats
-  const [stats, setStats] = useState({
-    played: 0,
-    wins: 0,
-    currentStreak: 0,
-    maxStreak: 0,
-    guessDistribution: [0, 0, 0, 0, 0, 0]
-  });
-
-  const audioEngineRef = useRef<AudioEngine | null>(null);
-
-  useEffect(() => {
-    const engine = new AudioEngine((playing, currentTime) => {
-      setIsPlaying(playing);
-      const curDur = GUESS_DURATIONS[Math.min(currentStep, 5)];
-      setPlaybackProgress(Math.min(1, currentTime / curDur));
-    });
-    audioEngineRef.current = engine;
-
-    const savedRoom = getSavedRoom();
-    if (savedRoom) {
-      setRoom(savedRoom);
-    } else {
-      setRoom(createRoom(MOCK_SPOTIFY_USERS[0]));
-    }
-
-    const savedStats = localStorage.getItem('snippetle_stats');
-    if (savedStats) {
-      try { setStats(JSON.parse(savedStats)); } catch (e) {}
-    }
-  }, []);
-
-  // Update Daily 3 Songs when category changes
-  useEffect(() => {
-    const threeSongs = getDailyThreeSongs(category);
-    setDailyThreeSongs(threeSongs);
-    setIsFreePlay(false);
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const key = `snippetle_progress_${category}_${todayStr}`;
-    const storedProgress = localStorage.getItem(key);
-
-    if (storedProgress) {
-      try {
-        const parsed = JSON.parse(storedProgress);
-        const ids = parsed.completedSongIds || [];
-        setCompletedDailySongIds(ids);
-        const doneCount = ids.length;
-        if (doneCount >= 3) {
-          setIsDailyCompleted(true);
-          setDailySongIndex(2);
-          setActiveSong(threeSongs[2]);
-        } else {
-          setIsDailyCompleted(false);
-          setDailySongIndex(doneCount);
-          setActiveSong(threeSongs[doneCount]);
-        }
-      } catch (e) {
-        setDailySongIndex(0);
-        setActiveSong(threeSongs[0]);
-      }
-    } else {
-      setIsDailyCompleted(false);
-      setCompletedDailySongIds([]);
-      setDailySongIndex(0);
-      setActiveSong(threeSongs[0]);
-    }
-
-    resetGameState();
-  }, [category]);
-
-  // Load Active Song Audio
-  useEffect(() => {
-    if (audioEngineRef.current && activeSong) {
-      audioEngineRef.current.loadSong(activeSong.audioUrl);
-    }
-  }, [activeSong]);
-
-  const handlePlaySnippet = () => {
-    if (!audioEngineRef.current || isGameOver) return;
-    const duration = GUESS_DURATIONS[Math.min(currentStep, 5)];
-    audioEngineRef.current.playSnippet(duration);
-  };
-
-  const handlePause = () => {
-    if (audioEngineRef.current) audioEngineRef.current.pause();
-  };
-
-  const handleSkipStep = () => {
-    if (isGameOver) return;
-    const newAttempt: GuessAttempt = { status: 'SKIPPED' };
-    const updatedAttempts = [...attempts, newAttempt];
-    setAttempts(updatedAttempts);
-
-    if (currentStep < 5) {
-      setCurrentStep(prev => prev + 1);
-    } else {
-      endGame(false, updatedAttempts);
+  const handleProfileSelect = (profileId: string) => {
+    const p = PRESET_TASTE_PROFILES.find(x => x.id === profileId);
+    if (p) {
+      setSelectedProfileId(profileId);
+      setPlayerName(p.name.split(' ')[0]);
     }
   };
 
-  const handleGuessSong = (selectedSong: Song) => {
-    if (isGameOver || !activeSong) return;
+  const handleCreateRoom = () => {
+    const playerId = `host_${Math.random().toString(36).substring(2, 9)}`;
+    const topSongs = generateSongsFromProfile(activeProfile, playerId);
 
-    const isExactTitle = selectedSong.id === activeSong.id || 
-      selectedSong.title.toLowerCase().trim() === activeSong.title.toLowerCase().trim();
-
-    let status: AttemptStatus = 'INCORRECT';
-
-    if (isExactTitle) {
-      status = 'CORRECT';
-    } else if (checkArtistOverlap(selectedSong.artist, activeSong.artist)) {
-      status = 'ARTIST_CORRECT'; // Yellow status for correct artist!
-    }
-
-    const newAttempt: GuessAttempt = {
-      guess: `${selectedSong.title} - ${selectedSong.artist}`,
-      status,
-      song: selectedSong
+    const hostPlayer: GamePlayer = {
+      id: playerId,
+      name: playerName || activeProfile.name.split(' ')[0],
+      avatar: activeProfile.avatar,
+      isHost: true,
+      isReady: true,
+      spotifyConnected: true,
+      spotifyUsername: `${activeProfile.genre} Taste`,
+      topSongs: topSongs,
+      score: 0,
+      currentStreak: 0
     };
 
-    const updatedAttempts = [...attempts, newAttempt];
-    setAttempts(updatedAttempts);
-
-    if (status === 'CORRECT') {
-      endGame(true, updatedAttempts);
-    } else if (currentStep < 5) {
-      setCurrentStep(prev => prev + 1);
-    } else {
-      endGame(false, updatedAttempts);
-    }
+    localStorage.setItem('whose_track_active_player', JSON.stringify(hostPlayer));
+    const room = createGameRoom(hostPlayer);
+    router.push(`/room/${room.code}`);
   };
 
-  const endGame = (won: boolean, finalAttempts: GuessAttempt[]) => {
-    setIsGameOver(true);
-    setIsWon(won);
-    setIsResultModalOpen(true);
+  const handleJoinRoom = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinCode.trim()) return;
 
-    if (audioEngineRef.current) {
-      audioEngineRef.current.playFull();
-      setIsPlayingFull(true);
-    }
+    const playerId = `player_${Math.random().toString(36).substring(2, 9)}`;
+    const topSongs = generateSongsFromProfile(activeProfile, playerId);
 
-    if (mode === 'DAILY' && !isFreePlay && activeSong) {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const key = `snippetle_progress_${category}_${todayStr}`;
-      
-      setCompletedDailySongIds(prev => {
-        const newCompleted = [...prev, activeSong.id];
-        const isFinished = newCompleted.length >= 3;
-        if (isFinished) {
-          setIsDailyCompleted(true);
-        }
-        localStorage.setItem(key, JSON.stringify({
-          date: todayStr,
-          category,
-          completedSongIds: newCompleted,
-          isFinished
-        }));
-        return newCompleted;
-      });
-    }
+    const player: GamePlayer = {
+      id: playerId,
+      name: playerName || activeProfile.name.split(' ')[0],
+      avatar: activeProfile.avatar,
+      isHost: false,
+      isReady: true,
+      spotifyConnected: true,
+      spotifyUsername: `${activeProfile.genre} Taste`,
+      topSongs: topSongs,
+      score: 0,
+      currentStreak: 0
+    };
 
-    // Save Stats
-    setStats(prev => {
-      const newStats = { ...prev };
-      newStats.played += 1;
-      if (won) {
-        newStats.wins += 1;
-        newStats.currentStreak += 1;
-        newStats.maxStreak = Math.max(newStats.maxStreak, newStats.currentStreak);
-        const stepIdx = Math.min(finalAttempts.length - 1, 5);
-        newStats.guessDistribution[stepIdx] += 1;
-      } else {
-        newStats.currentStreak = 0;
-      }
-      localStorage.setItem('snippetle_stats', JSON.stringify(newStats));
-      return newStats;
-    });
-  };
-
-  const handleNextSong = () => {
-    if (mode === 'DAILY' && !isFreePlay) {
-      const nextIdx = dailySongIndex + 1;
-      if (nextIdx < 3 && dailyThreeSongs[nextIdx]) {
-        setDailySongIndex(nextIdx);
-        setActiveSong(dailyThreeSongs[nextIdx]);
-      } else {
-        setIsDailyCompleted(true);
-      }
-    } else if (mode === 'GROUP' && room && room.playlist.length > 0) {
-      const nextIdx = Math.floor(Math.random() * room.playlist.length);
-      setActiveSong(room.playlist[nextIdx]);
-    } else {
-      const pool = getSongsByCategory(category);
-      const randomIdx = Math.floor(Math.random() * pool.length);
-      setActiveSong(pool[randomIdx]);
-    }
-    resetGameState();
-  };
-
-  const resetGameState = () => {
-    setCurrentStep(0);
-    setAttempts([]);
-    setIsGameOver(false);
-    setIsWon(false);
-    setIsPlayingFull(false);
-    setPlaybackProgress(0);
-    if (audioEngineRef.current) audioEngineRef.current.stop();
-  };
-
-  const toggleMute = () => {
-    const nextMute = !isMuted;
-    setIsMuted(nextMute);
-    if (audioEngineRef.current) audioEngineRef.current.setVolume(nextMute ? 0 : 1);
+    localStorage.setItem('whose_track_active_player', JSON.stringify(player));
+    router.push(`/room/${joinCode.trim().toUpperCase()}`);
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-songless-bg text-songless-text selection:bg-amber-400 selection:text-black">
-      {/* Top Header */}
-      <Navbar
-        category={category}
-        setCategory={setCategory}
-        mode={mode}
-        setMode={setMode}
-        openGroupModal={() => setIsGroupModalOpen(true)}
-        openStatsModal={() => setIsStatsModalOpen(true)}
-        isMuted={isMuted}
-        toggleMute={toggleMute}
-        dailyProgressCount={completedDailySongIds.length}
-      />
-
-      {/* Main Game Interface */}
-      <main className="flex-1 max-w-3xl w-full mx-auto px-4 py-6 flex flex-col justify-center space-y-6">
-        
-        {/* Banner for Daily Mode vs Group Mode */}
-        {mode === 'DAILY' && (
-          <div className="bg-songless-tile/40 backdrop-blur border border-songless-tile p-3.5 rounded-2xl flex items-center justify-between text-xs shadow-md">
-            <div className="flex items-center space-x-2">
-              <span className="font-extrabold text-amber-400 uppercase tracking-wider">
-                Daily 3-Song Challenge ({category})
+    <div className="min-h-screen bg-[#0a0a0c] text-white selection:bg-emerald-500 selection:text-black flex flex-col justify-between">
+      {/* Top Navbar */}
+      <header className="py-4 px-6 sm:px-12 border-b border-neutral-800/80 bg-neutral-950/60 backdrop-blur-xl sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-gradient-to-tr from-emerald-500 to-teal-400 rounded-2xl text-black shadow-lg shadow-emerald-500/20">
+              <Music className="w-5 h-5 stroke-[2.5]" />
+            </div>
+            <div>
+              <span className="font-black text-xl tracking-tight text-white font-sans">
+                WHOSE TRACK?
               </span>
-              <span className="text-songless-subtext">•</span>
-              <span className="text-songless-subtext font-mono font-bold">
-                Song {Math.min(dailySongIndex + 1, 3)} of 3
+              <span className="ml-2 bg-emerald-500/20 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-500/30">
+                Spotify Party
               </span>
             </div>
-
-            {isDailyCompleted && (
-              <button
-                onClick={() => {
-                  setIsFreePlay(true);
-                  handleNextSong();
-                }}
-                className="px-3 py-1 bg-gradient-to-r from-amber-400 to-orange-500 text-black font-extrabold rounded-xl shadow-md text-[11px] flex items-center space-x-1"
-              >
-                <Sparkles className="w-3 h-3 fill-current" />
-                <span>Unlimited Free Play</span>
-              </button>
-            )}
           </div>
-        )}
 
-        {mode === 'GROUP' && room && (
-          <div className="bg-gradient-to-r from-songless-spotify/20 to-emerald-500/10 border border-songless-spotify/40 p-3.5 rounded-2xl flex items-center justify-between shadow-lg">
-            <div className="flex items-center space-x-3">
-              <div className="p-2 bg-songless-spotify text-black rounded-xl font-black text-xs">
-                <Users className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-songless-text flex items-center space-x-2">
-                  <span>Spotify Group Room: <span className="text-amber-400 font-mono font-black">{room.code}</span></span>
-                </div>
-                <div className="text-[11px] text-songless-subtext">
-                  Playing pooled songs from {room.users.length} connected friends!
-                </div>
-              </div>
-            </div>
-
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setIsGroupModalOpen(true)}
-              className="px-3 py-1.5 bg-songless-tile hover:bg-songless-tileHover text-xs font-bold rounded-xl border border-songless-tileHover"
+              onClick={() => setIsCloudModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs font-semibold text-neutral-300 hover:text-white transition shadow-sm"
+              title="Configure Online Play for different networks"
             >
-              Manage Room
+              <Globe className="w-3.5 h-3.5 text-purple-400" />
+              <span>Online Setup</span>
             </button>
           </div>
-        )}
+        </div>
+      </header>
 
-        {/* Daily Completed Locked Card */}
-        {mode === 'DAILY' && isDailyCompleted && !isFreePlay ? (
-          <div className="bg-songless-tile/60 backdrop-blur border border-amber-400/40 p-8 rounded-3xl text-center space-y-4 shadow-2xl">
-            <div className="w-16 h-16 bg-amber-400/20 text-amber-400 rounded-full flex items-center justify-center mx-auto border border-amber-400/30">
-              <Clock className="w-8 h-8 animate-pulse" />
+      <CloudSyncModal isOpen={isCloudModalOpen} onClose={() => setIsCloudModalOpen(false)} />
+
+      {/* Hero Section */}
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-12 space-y-12">
+        <div className="text-center space-y-4 max-w-3xl mx-auto">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-black uppercase tracking-widest animate-pulse">
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            The Ultimate Music Mystery Party Game
+          </div>
+
+          <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight leading-tight">
+            Listen to the track. <br />
+            <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+              Guess whose Top Song it is!
+            </span>
+          </h1>
+
+          <p className="text-neutral-400 text-base sm:text-lg max-w-2xl mx-auto">
+            Connect your Spotify or pick a taste profile to load your Top 30 tracks. Compete with friends in real time, score speed points, and unlock 2x multipliers on shared hits!
+          </p>
+        </div>
+
+        {/* Profile / Character Setup Card */}
+        <div className="bg-neutral-900/80 border border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
+          <div className="flex items-center gap-2 mb-4 text-xs font-bold uppercase tracking-widest text-emerald-400">
+            <Headphones className="w-4 h-4" />
+            Step 1: Choose Your Music Identity & Top 30 Roster
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            <div>
+              <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
+                Your Player Name:
+              </label>
+              <input
+                type="text"
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-2xl px-4 py-3 text-white text-sm font-semibold focus:outline-none focus:border-emerald-500 transition"
+                placeholder="Enter your name"
+              />
             </div>
-            <div className="space-y-1">
-              <h2 className="text-2xl font-black text-white">Daily Challenge Complete!</h2>
-              <p className="text-xs text-songless-subtext">
-                You played all 3 daily songs for today's {category} category. Come back tomorrow for 3 new songs!
+
+            <div>
+              <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
+                Music Taste Preset (30 Songs):
+              </label>
+              <select
+                value={selectedProfileId}
+                onChange={(e) => handleProfileSelect(e.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-2xl px-4 py-3 text-white text-sm font-semibold focus:outline-none focus:border-emerald-500 transition"
+              >
+                {PRESET_TASTE_PROFILES.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.genre})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Active Profile Info Banner */}
+          <div className="flex items-center gap-4 bg-neutral-950/70 p-4 rounded-2xl border border-neutral-800/80">
+            <img
+              src={activeProfile.avatar}
+              alt={activeProfile.name}
+              className="w-14 h-14 rounded-2xl object-cover border-2 border-emerald-500/60 flex-shrink-0"
+            />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-white text-sm">
+                  {activeProfile.genre}
+                </span>
+                <span className="text-xs text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-md">
+                  30 Songs Loaded ✓
+                </span>
+              </div>
+              <p className="text-xs text-neutral-400 mt-1 line-clamp-1">
+                {activeProfile.description}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Grid: Create Room vs Join Room */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Create Room Card */}
+          <div className="bg-gradient-to-br from-neutral-900 via-neutral-900/90 to-neutral-950 border border-neutral-800 hover:border-neutral-700 rounded-3xl p-8 shadow-2xl flex flex-col justify-between space-y-6 group transition">
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+                <Sparkles className="w-6 h-6" />
+              </div>
+              <h2 className="text-2xl font-black text-white">
+                Create a New Room
+              </h2>
+              <p className="text-neutral-400 text-sm">
+                Get a unique 6-character room code. Invite friends to link their accounts and play together in real time!
               </p>
             </div>
 
             <button
-              onClick={() => {
-                setIsFreePlay(true);
-                handleNextSong();
-              }}
-              className="px-6 py-3.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-black font-extrabold rounded-2xl text-xs shadow-xl transition transform hover:scale-105 inline-flex items-center space-x-2"
+              onClick={handleCreateRoom}
+              className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-black font-black text-sm uppercase tracking-wider rounded-2xl shadow-xl shadow-emerald-500/20 transition active:scale-95"
             >
-              <Sparkles className="w-4 h-4 fill-current" />
-              <span>Continue in Unlimited Free Play Mode</span>
+              <Play className="w-4 h-4 fill-current" />
+              Host & Create Room
             </button>
           </div>
-        ) : (
-          <>
-            {/* Guess Attempts Timeline */}
-            <GuessTimeline attempts={attempts} currentStep={currentStep} />
 
-            {/* Audio Snippet Controls */}
-            <AudioPlayerControls
-              currentStep={currentStep}
-              isPlaying={isPlaying}
-              onPlay={handlePlaySnippet}
-              onPause={handlePause}
-              onSkip={handleSkipStep}
-              playbackProgress={playbackProgress}
-              isGameOver={isGameOver}
-              activeSong={activeSong || undefined}
-            />
+          {/* Join Room Card */}
+          <div className="bg-gradient-to-br from-neutral-900 via-neutral-900/90 to-neutral-950 border border-neutral-800 hover:border-neutral-700 rounded-3xl p-8 shadow-2xl flex flex-col justify-between space-y-6 group transition">
+            <div className="space-y-3">
+              <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 group-hover:scale-110 transition-transform">
+                <Users className="w-6 h-6" />
+              </div>
+              <h2 className="text-2xl font-black text-white">
+                Join with Room Code
+              </h2>
+              <p className="text-neutral-400 text-sm">
+                Have a friend's room code? Enter it below to jump straight into the guessing party!
+              </p>
+            </div>
 
-            {/* Autocomplete Search */}
-            <SongSearchInput
-              onSelectSong={handleGuessSong}
-              isGameOver={isGameOver}
-              category={category}
-              poolSongs={mode === 'GROUP' && room ? room.playlist : undefined}
-            />
-          </>
-        )}
+            <form onSubmit={handleJoinRoom} className="space-y-3">
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="ENTER 6-CHAR CODE (e.g. PARTY8)"
+                maxLength={8}
+                className="w-full bg-neutral-950 border border-neutral-700 rounded-2xl px-4 py-3 text-center text-white font-mono font-bold tracking-widest text-lg focus:outline-none focus:border-purple-500 transition"
+              />
+              <button
+                type="submit"
+                disabled={!joinCode.trim()}
+                className="w-full flex items-center justify-center gap-2 py-4 px-6 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-white font-black text-sm uppercase tracking-wider rounded-2xl transition border border-neutral-700 active:scale-95"
+              >
+                Join Party
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Feature Highlights */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-6">
+          <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-2xl p-5 space-y-2">
+            <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+              <Zap className="w-4 h-4" />
+              Speed-Based Scoring
+            </div>
+            <p className="text-xs text-neutral-400">
+              The quicker you identify the suspect, the more points you earn (up to 1,000 pts per round).
+            </p>
+          </div>
+
+          <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-2xl p-5 space-y-2">
+            <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+              <Flame className="w-4 h-4" />
+              2X Shared Track Multiplier
+            </div>
+            <p className="text-xs text-neutral-400">
+              If more than one person has the song in their Top 30, correct points are automatically doubled!
+            </p>
+          </div>
+
+          <div className="bg-neutral-900/40 border border-neutral-800/80 rounded-2xl p-5 space-y-2">
+            <div className="flex items-center gap-2 text-purple-400 font-bold text-sm">
+              <ShieldCheck className="w-4 h-4" />
+              100% Guaranteed Audio
+            </div>
+            <p className="text-xs text-neutral-400">
+              Powered by Apple iTunes 30-sec audio snippets fallback for instant zero-fail playback.
+            </p>
+          </div>
+        </div>
       </main>
 
       {/* Footer */}
-      <footer className="py-4 text-center text-xs text-songless-subtext border-t border-songless-tile/40">
-        <span>Snippetle 🎵 • Daily 3-Song Challenge & Spotify Group History</span>
+      <footer className="py-6 border-t border-neutral-800/60 text-center text-xs text-neutral-500">
+        Whose Track? • Real-Time Multiplayer Spotify Guessing Party Game
       </footer>
-
-      {/* Modals */}
-      <SpotifyGroupModal
-        isOpen={isGroupModalOpen}
-        onClose={() => setIsGroupModalOpen(false)}
-        room={room}
-        setRoom={setRoom}
-        onStartGroupGame={() => {
-          setMode('GROUP');
-          handleNextSong();
-        }}
-      />
-
-      {activeSong && (
-        <GameResultModal
-          isOpen={isResultModalOpen}
-          onClose={() => setIsResultModalOpen(false)}
-          targetSong={activeSong}
-          isWon={isWon}
-          attempts={attempts}
-          onPlayFullSong={() => audioEngineRef.current?.playFull()}
-          onPauseFullSong={() => audioEngineRef.current?.pause()}
-          isPlayingFull={isPlayingFull}
-          onNextSong={handleNextSong}
-          dailySongIndex={dailySongIndex}
-          isDailyCompleted={isDailyCompleted}
-          category={category}
-        />
-      )}
-
-      <StatsModal
-        isOpen={isStatsModalOpen}
-        onClose={() => setIsStatsModalOpen(false)}
-        stats={stats}
-      />
     </div>
   );
 }
