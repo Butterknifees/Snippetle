@@ -137,7 +137,7 @@ export const RoomClient: React.FC<RoomClientProps> = ({ roomCode }) => {
                 <Music className="w-4 h-4 stroke-[2.5]" />
               </div>
               <span className="font-black text-lg tracking-tight hidden sm:inline">
-                WHOSE TRACK?
+                ICEBREAKERS
               </span>
             </div>
           </div>
@@ -231,7 +231,7 @@ export const RoomClient: React.FC<RoomClientProps> = ({ roomCode }) => {
 
       {/* Footer */}
       <footer className="py-4 border-t border-neutral-800/60 text-center text-xs text-neutral-500">
-        Whose Track? • Powered by Spotify API & Apple iTunes Audio Engine
+        Icebreakers 🎵 • Powered by Spotify API & Apple iTunes Audio Engine
       </footer>
     </div>
   );

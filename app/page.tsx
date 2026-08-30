@@ -96,10 +96,10 @@ export default function HomePage() {
             </div>
             <div>
               <span className="font-black text-xl tracking-tight text-white font-sans">
-                WHOSE TRACK?
+                ICEBREAKERS
               </span>
               <span className="ml-2 bg-emerald-500/20 text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider border border-emerald-500/30">
-                Spotify Party
+                Spotify Party Game
               </span>
             </div>
           </div>
@@ -297,7 +297,7 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="py-6 border-t border-neutral-800/60 text-center text-xs text-neutral-500">
-        Whose Track? • Real-Time Multiplayer Spotify Guessing Party Game
+        Icebreakers 🎵 • Real-Time Multiplayer Spotify Top-30 Guessing Party Game
       </footer>
     </div>
   );

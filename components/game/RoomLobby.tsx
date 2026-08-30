@@ -120,7 +120,7 @@ export const RoomLobby: React.FC<RoomLobbyProps> = ({
               </span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Whose Track Is It?
+              Icebreakers: Whose Track?
             </h1>
             <p className="text-neutral-400 text-sm mt-1">
               Link your Spotify account or pick a taste profile. Guess who listens to each track!
