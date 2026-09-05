@@ -120,7 +120,7 @@ export default function Home() {
     if (storedProgress) {
       try {
         const parsed = JSON.parse(storedProgress);
-        const ids = parsed.completedSongIds || [];
+        const ids: string[] = parsed.completedSongIds || [];
         setCompletedDailySongIds(ids);
         const doneCount = ids.length;
         if (doneCount >= 3) {
@@ -133,6 +133,7 @@ export default function Home() {
           setActiveSong(threeSongs[doneCount]);
         }
       } catch (e) {
+        setCompletedDailySongIds([]);
         setDailySongIndex(0);
         setActiveSong(threeSongs[0]);
       }
@@ -259,7 +260,7 @@ export default function Home() {
 
   const handleNextSong = () => {
     if (mode === 'DAILY') {
-      const nextIdx = dailySongIndex + 1;
+      const nextIdx = completedDailySongIds.length;
       if (nextIdx < 3 && dailyThreeSongs[nextIdx]) {
         setDailySongIndex(nextIdx);
         setActiveSong(dailyThreeSongs[nextIdx]);
@@ -322,7 +323,7 @@ export default function Home() {
               </span>
               <span className="text-songless-subtext">•</span>
               <span className="text-songless-subtext font-mono font-bold">
-                Song {Math.min(dailySongIndex + 1, 3)} of 3
+                Song {Math.min(completedDailySongIds.length + 1, 3)} of 3
               </span>
             </div>
 
@@ -436,7 +437,7 @@ export default function Home() {
           onPauseFullSong={() => audioEngineRef.current?.pause()}
           isPlayingFull={isPlayingFull}
           onNextSong={handleNextSong}
-          dailySongIndex={dailySongIndex}
+          dailySongIndex={completedDailySongIds.length - 1}
           isDailyCompleted={isDailyCompleted}
           category={category}
           hindiGenre={hindiGenre}
