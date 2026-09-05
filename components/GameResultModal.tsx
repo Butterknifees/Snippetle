@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { X, Play, Pause, Share2, Check, RefreshCw, Trophy, Clock, Sparkles } from 'lucide-react';
-import { Song, GuessAttempt, SongCategory, getQuartileBadge } from '../lib/types';
+import { Song, GuessAttempt, SongCategory, HindiGenre, getQuartileBadge } from '../lib/types';
 
 interface GameResultModalProps {
   isOpen: boolean;
@@ -18,6 +18,7 @@ interface GameResultModalProps {
   dailySongIndex: number; // 0, 1, 2
   isDailyCompleted: boolean;
   category: SongCategory;
+  hindiGenre?: HindiGenre;
 }
 
 export const GameResultModal: React.FC<GameResultModalProps> = ({
@@ -32,16 +33,22 @@ export const GameResultModal: React.FC<GameResultModalProps> = ({
   onNextSong,
   dailySongIndex,
   isDailyCompleted,
-  category
+  category,
+  hindiGenre
 }) => {
   const [shared, setShared] = useState(false);
   const [countdown, setCountdown] = useState<string>('');
 
+  // Calculate countdown specifically to 00:00:00 IST (UTC+5:30)
   useEffect(() => {
     const updateCountdown = () => {
       const now = new Date();
-      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-      const diffMs = tomorrow.getTime() - now.getTime();
+      // IST time
+      const utcMs = now.getTime() + (now.getTimezoneOffset() * 60 * 1000);
+      const istNow = new Date(utcMs + (5.5 * 60 * 60 * 1000));
+      
+      const istTomorrow = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate() + 1, 0, 0, 0);
+      const diffMs = istTomorrow.getTime() - istNow.getTime();
       
       const hours = Math.floor(diffMs / (1000 * 60 * 60));
       const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -72,7 +79,8 @@ export const GameResultModal: React.FC<GameResultModalProps> = ({
       return '⬛';
     }).join('');
 
-    return `Snippetle 🎵 (${category})\n${isWon ? `Guessed in ${attempts.length}/6 attempts! 🎉` : 'Defeated! ❌'}\n${emojis}\nPlay: https://ruchirsmac.github.io/Songless/`;
+    const genreTag = category === 'HINDI' ? `Hindi ${hindiGenre}` : 'English';
+    return `Snippetle 🎵 (${genreTag})\n${isWon ? `Guessed in ${attempts.length}/6 attempts! 🎉` : 'Defeated! ❌'}\n${emojis}\nPlay: https://butterknifees.github.io/Snippetle/`;
   };
 
   const handleShare = () => {
@@ -169,21 +177,21 @@ export const GameResultModal: React.FC<GameResultModalProps> = ({
 
         {/* Daily Challenge 3-Song Status */}
         {isDailyCompleted ? (
-          <div className="bg-amber-400/10 border border-amber-400/30 p-3 rounded-2xl space-y-1">
-            <div className="flex items-center justify-center space-x-1.5 text-xs font-bold text-amber-400">
+          <div className="bg-amber-400/10 border border-amber-400/30 p-4 rounded-2xl space-y-1.5">
+            <div className="flex items-center justify-center space-x-1.5 text-xs font-bold text-amber-400 uppercase tracking-wider">
               <Clock className="w-4 h-4" />
-              <span>Daily Challenge Complete! (3/3 Songs Played)</span>
+              <span>Daily Challenge Complete (3/3)</span>
             </div>
             <p className="text-[11px] text-songless-subtext">
-              Come back tomorrow for 3 new songs! Next set unlocks in:
+              You played all 3 daily songs for {category === 'HINDI' ? `Hindi ${hindiGenre}` : 'English'}. Next set unlocks at IST Midnight in:
             </p>
-            <div className="text-lg font-black font-mono text-white tracking-widest pt-0.5">
+            <div className="text-xl font-black font-mono text-white tracking-widest pt-0.5">
               {countdown}
             </div>
           </div>
         ) : (
           <div className="text-xs text-songless-subtext font-semibold">
-            Daily Challenge Progress: <span className="text-amber-400 font-bold">Song {dailySongIndex + 1} of 3</span>
+            Daily Progress: <span className="text-amber-400 font-bold">Song {dailySongIndex + 1} of 3</span>
           </div>
         )}
 

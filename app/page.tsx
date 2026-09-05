@@ -8,12 +8,12 @@ import { SongSearchInput } from '../components/SongSearchInput';
 import { SpotifyGroupModal } from '../components/SpotifyGroupModal';
 import { GameResultModal } from '../components/GameResultModal';
 import { StatsModal } from '../components/StatsModal';
-import { Song, GuessAttempt, GUESS_DURATIONS, GroupRoom, SongCategory, AttemptStatus } from '../lib/types';
-import { getDailyThreeSongs, getSongsByCategory } from '../lib/hindiSongs';
+import { Song, GuessAttempt, GUESS_DURATIONS, GroupRoom, SongCategory, HindiGenre, AttemptStatus, getISTDateString } from '../lib/types';
+import { getDailyThreeSongs, getSongsByCategoryAndGenre } from '../lib/hindiSongs';
 import { AudioEngine } from '../lib/audioEngine';
 import { getSavedRoom, createRoom } from '../lib/roomStore';
 import { MOCK_SPOTIFY_USERS } from '../lib/spotify';
-import { Users, Clock, Sparkles } from 'lucide-react';
+import { Users, Clock } from 'lucide-react';
 
 function checkArtistOverlap(artist1: string, artist2: string): boolean {
   const a1List = artist1.toLowerCase().split(/[,&]/).map(s => s.trim()).filter(Boolean);
@@ -23,6 +23,7 @@ function checkArtistOverlap(artist1: string, artist2: string): boolean {
 
 export default function Home() {
   const [category, setCategory] = useState<SongCategory>('HINDI');
+  const [hindiGenre, setHindiGenre] = useState<HindiGenre>('POP');
   const [mode, setMode] = useState<'DAILY' | 'GROUP'>('DAILY');
   
   // Daily 3-Song Progress State
@@ -30,7 +31,6 @@ export default function Home() {
   const [dailySongIndex, setDailySongIndex] = useState<number>(0);
   const [completedDailySongIds, setCompletedDailySongIds] = useState<string[]>([]);
   const [isDailyCompleted, setIsDailyCompleted] = useState<boolean>(false);
-  const [isFreePlay, setIsFreePlay] = useState<boolean>(false);
 
   const [activeSong, setActiveSong] = useState<Song | null>(null);
   const [currentStep, setCurrentStep] = useState<number>(0);
@@ -49,6 +49,9 @@ export default function Home() {
   const [playbackProgress, setPlaybackProgress] = useState<number>(0);
   const [isMuted, setIsMuted] = useState<boolean>(false);
 
+  // Countdown timer to IST midnight
+  const [istCountdown, setIstCountdown] = useState<string>('');
+
   // Stats
   const [stats, setStats] = useState({
     played: 0,
@@ -60,6 +63,30 @@ export default function Home() {
 
   const audioEngineRef = useRef<AudioEngine | null>(null);
 
+  // IST Midnight Countdown Effect
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      const utcMs = now.getTime() + (now.getTimezoneOffset() * 60 * 1000);
+      const istNow = new Date(utcMs + (5.5 * 60 * 60 * 1000));
+      const istTomorrow = new Date(istNow.getFullYear(), istNow.getMonth(), istNow.getDate() + 1, 0, 0, 0);
+      const diffMs = istTomorrow.getTime() - istNow.getTime();
+
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+      setIstCountdown(
+        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+      );
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Initialize Audio Engine & Room
   useEffect(() => {
     const engine = new AudioEngine((playing, currentTime) => {
       setIsPlaying(playing);
@@ -81,14 +108,13 @@ export default function Home() {
     }
   }, []);
 
-  // Update Daily 3 Songs when category changes
+  // Update Daily 3 Songs when category or genre changes (IST Midnight Seed)
   useEffect(() => {
-    const threeSongs = getDailyThreeSongs(category);
+    const istDate = getISTDateString();
+    const threeSongs = getDailyThreeSongs(category, hindiGenre, istDate);
     setDailyThreeSongs(threeSongs);
-    setIsFreePlay(false);
 
-    const todayStr = new Date().toISOString().split('T')[0];
-    const key = `snippetle_progress_${category}_${todayStr}`;
+    const key = `snippetle_progress_${category}_${category === 'HINDI' ? hindiGenre : 'ALL'}_${istDate}`;
     const storedProgress = localStorage.getItem(key);
 
     if (storedProgress) {
@@ -118,7 +144,7 @@ export default function Home() {
     }
 
     resetGameState();
-  }, [category]);
+  }, [category, hindiGenre]);
 
   // Load Active Song Audio
   useEffect(() => {
@@ -192,9 +218,9 @@ export default function Home() {
       setIsPlayingFull(true);
     }
 
-    if (mode === 'DAILY' && !isFreePlay && activeSong) {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const key = `snippetle_progress_${category}_${todayStr}`;
+    if (mode === 'DAILY' && activeSong) {
+      const istDate = getISTDateString();
+      const key = `snippetle_progress_${category}_${category === 'HINDI' ? hindiGenre : 'ALL'}_${istDate}`;
       
       setCompletedDailySongIds(prev => {
         const newCompleted = [...prev, activeSong.id];
@@ -203,8 +229,9 @@ export default function Home() {
           setIsDailyCompleted(true);
         }
         localStorage.setItem(key, JSON.stringify({
-          date: todayStr,
+          date: istDate,
           category,
+          genre: category === 'HINDI' ? hindiGenre : 'ALL',
           completedSongIds: newCompleted,
           isFinished
         }));
@@ -231,7 +258,7 @@ export default function Home() {
   };
 
   const handleNextSong = () => {
-    if (mode === 'DAILY' && !isFreePlay) {
+    if (mode === 'DAILY') {
       const nextIdx = dailySongIndex + 1;
       if (nextIdx < 3 && dailyThreeSongs[nextIdx]) {
         setDailySongIndex(nextIdx);
@@ -243,7 +270,7 @@ export default function Home() {
       const nextIdx = Math.floor(Math.random() * room.playlist.length);
       setActiveSong(room.playlist[nextIdx]);
     } else {
-      const pool = getSongsByCategory(category);
+      const pool = getSongsByCategoryAndGenre(category, hindiGenre);
       const randomIdx = Math.floor(Math.random() * pool.length);
       setActiveSong(pool[randomIdx]);
     }
@@ -272,6 +299,8 @@ export default function Home() {
       <Navbar
         category={category}
         setCategory={setCategory}
+        hindiGenre={hindiGenre}
+        setHindiGenre={setHindiGenre}
         mode={mode}
         setMode={setMode}
         openGroupModal={() => setIsGroupModalOpen(true)}
@@ -289,7 +318,7 @@ export default function Home() {
           <div className="bg-songless-tile/40 backdrop-blur border border-songless-tile p-3.5 rounded-2xl flex items-center justify-between text-xs shadow-md">
             <div className="flex items-center space-x-2">
               <span className="font-extrabold text-amber-400 uppercase tracking-wider">
-                Daily 3-Song Challenge ({category})
+                Daily 3-Song Challenge ({category === 'HINDI' ? `Hindi ${hindiGenre}` : 'English'})
               </span>
               <span className="text-songless-subtext">•</span>
               <span className="text-songless-subtext font-mono font-bold">
@@ -297,18 +326,10 @@ export default function Home() {
               </span>
             </div>
 
-            {isDailyCompleted && (
-              <button
-                onClick={() => {
-                  setIsFreePlay(true);
-                  handleNextSong();
-                }}
-                className="px-3 py-1 bg-gradient-to-r from-amber-400 to-orange-500 text-black font-extrabold rounded-xl shadow-md text-[11px] flex items-center space-x-1"
-              >
-                <Sparkles className="w-3 h-3 fill-current" />
-                <span>Unlimited Free Play</span>
-              </button>
-            )}
+            <div className="text-[11px] font-mono text-songless-subtext flex items-center space-x-1">
+              <Clock className="w-3 h-3 text-amber-400" />
+              <span>Reset: {istCountdown}</span>
+            </div>
           </div>
         )}
 
@@ -338,7 +359,7 @@ export default function Home() {
         )}
 
         {/* Daily Completed Locked Card */}
-        {mode === 'DAILY' && isDailyCompleted && !isFreePlay ? (
+        {mode === 'DAILY' && isDailyCompleted ? (
           <div className="bg-songless-tile/60 backdrop-blur border border-amber-400/40 p-8 rounded-3xl text-center space-y-4 shadow-2xl">
             <div className="w-16 h-16 bg-amber-400/20 text-amber-400 rounded-full flex items-center justify-center mx-auto border border-amber-400/30">
               <Clock className="w-8 h-8 animate-pulse" />
@@ -346,20 +367,18 @@ export default function Home() {
             <div className="space-y-1">
               <h2 className="text-2xl font-black text-white">Daily Challenge Complete!</h2>
               <p className="text-xs text-songless-subtext">
-                You played all 3 daily songs for today's {category} category. Come back tomorrow for 3 new songs!
+                You have played all 3 daily songs for today's {category === 'HINDI' ? `Hindi ${hindiGenre}` : 'English'} category.
               </p>
             </div>
 
-            <button
-              onClick={() => {
-                setIsFreePlay(true);
-                handleNextSong();
-              }}
-              className="px-6 py-3.5 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-black font-extrabold rounded-2xl text-xs shadow-xl transition transform hover:scale-105 inline-flex items-center space-x-2"
-            >
-              <Sparkles className="w-4 h-4 fill-current" />
-              <span>Continue in Unlimited Free Play Mode</span>
-            </button>
+            <div className="bg-amber-400/10 p-4 rounded-2xl border border-amber-400/20 inline-block">
+              <div className="text-xs font-bold text-amber-400 uppercase tracking-widest">
+                Next 3 Songs Unlock In (IST Midnight)
+              </div>
+              <div className="text-3xl font-black font-mono text-white tracking-widest pt-1">
+                {istCountdown}
+              </div>
+            </div>
           </div>
         ) : (
           <>
@@ -420,6 +439,7 @@ export default function Home() {
           dailySongIndex={dailySongIndex}
           isDailyCompleted={isDailyCompleted}
           category={category}
+          hindiGenre={hindiGenre}
         />
       )}
 
