@@ -32,23 +32,60 @@ function fnv1aHash(str: string): number {
   return hash >>> 0;
 }
 
-// Daily selection of 3 unique songs resetting strictly at IST Midnight
+// Helper to calculate raw 3 song IDs for a specific date string without anti-repeat recursion
+function getRawDailySongIds(pool: Song[], category: SongCategory, genre: HindiGenre, dateStr: string): Set<string> {
+  const baseKey = `${category}_${genre}_${dateStr}`;
+  const pickedIds = new Set<string>();
+  let attempt = 0;
+
+  while (pickedIds.size < Math.min(3, pool.length)) {
+    const hashVal = fnv1aHash(`${baseKey}_attempt_${attempt}`);
+    const index = hashVal % pool.length;
+    pickedIds.add(pool[index].id);
+    attempt++;
+  }
+
+  return pickedIds;
+}
+
+// Daily selection of 3 unique songs with a strict 7-day anti-repeat filter
 export function getDailyThreeSongs(category: SongCategory, genre: HindiGenre = 'POP', dateStr?: string): Song[] {
-  const pool = getSongsByCategoryAndGenre(category, genre);
-  const istDateStr = dateStr || getISTDateString(); // YYYY-MM-DD in IST
+  const fullPool = getSongsByCategoryAndGenre(category, genre);
+  const targetDateStr = dateStr || getISTDateString();
   
-  const baseKey = `${category}_${genre}_${istDateStr}`;
+  // 1. Gather song IDs picked over the past 7 days to exclude them
+  const recent7DaysSongIds = new Set<string>();
+  const [year, month, day] = targetDateStr.split('-').map(Number);
+  const targetDateObj = new Date(Date.UTC(year, month - 1, day));
+
+  for (let offset = 1; offset <= 7; offset++) {
+    const prevDateObj = new Date(targetDateObj.getTime() - offset * 24 * 60 * 60 * 1000);
+    const prevYear = prevDateObj.getUTCFullYear();
+    const prevMonth = String(prevDateObj.getUTCMonth() + 1).padStart(2, '0');
+    const prevDay = String(prevDateObj.getUTCDate()).padStart(2, '0');
+    const prevDateStr = `${prevYear}-${prevMonth}-${prevDay}`;
+
+    const prevIds = getRawDailySongIds(fullPool, category, genre, prevDateStr);
+    prevIds.forEach(id => recent7DaysSongIds.add(id));
+  }
+
+  // 2. Filter pool to exclude songs played in the last 7 days
+  const eligiblePool = fullPool.filter(song => !recent7DaysSongIds.has(song.id));
+  const activePool = eligiblePool.length >= 3 ? eligiblePool : fullPool;
+
+  // 3. Pick 3 songs for targetDateStr from activePool
+  const baseKey = `${category}_${genre}_${targetDateStr}`;
   const selected: Song[] = [];
   const pickedIndices = new Set<number>();
   let attempt = 0;
 
-  while (selected.length < Math.min(3, pool.length)) {
+  while (selected.length < Math.min(3, activePool.length)) {
     const hashVal = fnv1aHash(`${baseKey}_attempt_${attempt}`);
-    const index = hashVal % pool.length;
+    const index = hashVal % activePool.length;
     
     if (!pickedIndices.has(index)) {
       pickedIndices.add(index);
-      selected.push(pool[index]);
+      selected.push(activePool[index]);
     }
     attempt++;
   }
