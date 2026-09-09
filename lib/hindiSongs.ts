@@ -22,10 +22,14 @@ export function getSongsByCategoryAndGenre(category: SongCategory, genre: HindiG
   return HINDI_POP_DATABASE;
 }
 
-// Pseudo-random hash generator for deterministic daily selection
-function seededRandom(seed: number) {
-  const x = Math.sin(seed++) * 10000;
-  return x - Math.floor(x);
+// High-Entropy FNV-1a Hash for uniform daily distribution without clustering
+function fnv1aHash(str: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
 
 // Daily selection of 3 unique songs resetting strictly at IST Midnight
@@ -33,20 +37,15 @@ export function getDailyThreeSongs(category: SongCategory, genre: HindiGenre = '
   const pool = getSongsByCategoryAndGenre(category, genre);
   const istDateStr = dateStr || getISTDateString(); // YYYY-MM-DD in IST
   
-  let seed = 0;
-  const key = `${category}_${genre}_${istDateStr}`;
-  for (let i = 0; i < key.length; i++) {
-    seed = (seed << 5) - seed + key.charCodeAt(i);
-    seed |= 0;
-  }
-
+  const baseKey = `${category}_${genre}_${istDateStr}`;
   const selected: Song[] = [];
   const pickedIndices = new Set<number>();
   let attempt = 0;
 
   while (selected.length < Math.min(3, pool.length)) {
-    const rnd = seededRandom(seed + attempt * 31);
-    const index = Math.floor(rnd * pool.length);
+    const hashVal = fnv1aHash(`${baseKey}_attempt_${attempt}`);
+    const index = hashVal % pool.length;
+    
     if (!pickedIndices.has(index)) {
       pickedIndices.add(index);
       selected.push(pool[index]);
