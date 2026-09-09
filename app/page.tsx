@@ -13,7 +13,7 @@ import { getDailyThreeSongs, getSongsByCategoryAndGenre } from '../lib/hindiSong
 import { AudioEngine } from '../lib/audioEngine';
 import { getSavedRoom, createRoom } from '../lib/roomStore';
 import { MOCK_SPOTIFY_USERS } from '../lib/spotify';
-import { Users, Clock } from 'lucide-react';
+import { Users, Clock, RefreshCw, Eye, Sparkles } from 'lucide-react';
 
 function checkArtistOverlap(artist1: string, artist2: string): boolean {
   const a1List = artist1.toLowerCase().split(/[,&]/).map(s => s.trim()).filter(Boolean);
@@ -224,7 +224,7 @@ export default function Home() {
       const key = `snippetle_progress_${category}_${category === 'HINDI' ? hindiGenre : 'ALL'}_${istDate}`;
       
       setCompletedDailySongIds(prev => {
-        const newCompleted = [...prev, activeSong.id];
+        const newCompleted = prev.includes(activeSong.id) ? prev : [...prev, activeSong.id];
         const isFinished = newCompleted.length >= 3;
         if (isFinished) {
           setIsDailyCompleted(true);
@@ -359,6 +359,43 @@ export default function Home() {
           </div>
         )}
 
+        {/* Action Banner when a song finishes (Won or Lost) before moving to next song */}
+        {isGameOver && !isDailyCompleted && (
+          <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border border-amber-400/50 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl animate-fade-in">
+            <div className="flex items-center space-x-3">
+              <div className={`p-2 rounded-xl text-black font-extrabold text-xs ${isWon ? 'bg-emerald-400' : 'bg-rose-500 text-white'}`}>
+                {isWon ? 'WON' : 'FAILED'}
+              </div>
+              <div className="text-left">
+                <div className="text-xs font-bold text-white">
+                  {isWon ? 'Great job!' : 'Song attempt finished!'} Answer: <span className="text-amber-400 italic">{activeSong?.title}</span>
+                </div>
+                <div className="text-[11px] text-songless-subtext">
+                  Ready for Song {completedDailySongIds.length + 1} of 3?
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 w-full sm:w-auto">
+              <button
+                onClick={() => setIsResultModalOpen(true)}
+                className="flex-1 sm:flex-none px-3.5 py-2 bg-songless-tile hover:bg-songless-tileHover text-white font-bold rounded-xl text-xs flex items-center justify-center space-x-1.5 border border-songless-tileHover transition"
+              >
+                <Eye className="w-4 h-4 text-songless-subtext" />
+                <span>Results</span>
+              </button>
+
+              <button
+                onClick={handleNextSong}
+                className="flex-1 sm:flex-none px-4 py-2 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-black font-extrabold rounded-xl text-xs flex items-center justify-center space-x-1.5 shadow-lg transition transform hover:scale-105"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Next Song ({completedDailySongIds.length + 1}/3)</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Daily Completed Locked Card */}
         {mode === 'DAILY' && isDailyCompleted ? (
           <div className="bg-songless-tile/60 backdrop-blur border border-amber-400/40 p-8 rounded-3xl text-center space-y-4 shadow-2xl">
@@ -437,7 +474,7 @@ export default function Home() {
           onPauseFullSong={() => audioEngineRef.current?.pause()}
           isPlayingFull={isPlayingFull}
           onNextSong={handleNextSong}
-          dailySongIndex={completedDailySongIds.length - 1}
+          dailySongIndex={completedDailySongIds.length}
           isDailyCompleted={isDailyCompleted}
           category={category}
           hindiGenre={hindiGenre}
