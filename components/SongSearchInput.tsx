@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Fuse from 'fuse.js';
-import { Search, Music, Sparkles, Loader2 } from 'lucide-react';
-import { Song, SongCategory, getQuartileBadge } from '../lib/types';
+import { Search, Music, Loader2 } from 'lucide-react';
+import { Song, SongCategory } from '../lib/types';
 import { getSongsByCategory } from '../lib/hindiSongs';
 
 interface SongSearchInputProps {
@@ -72,7 +72,6 @@ export const SongSearchInput: React.FC<SongSearchInputProps> = ({
                 year: item.releaseDate ? parseInt(item.releaseDate.substring(0, 4)) : undefined,
                 audioUrl: item.previewUrl,
                 coverUrl: item.artworkUrl100 ? item.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg') : undefined,
-                popularity: Math.floor(Math.random() * 50) + 50,
                 category
               }));
 
@@ -147,7 +146,6 @@ export const SongSearchInput: React.FC<SongSearchInputProps> = ({
       {isOpen && !isGameOver && (
         <div className="absolute left-0 right-0 top-full mt-2 bg-songless-dark border border-songless-tile rounded-2xl shadow-2xl overflow-hidden z-50 divide-y divide-songless-tile/50 max-h-80 overflow-y-auto">
           {results.map((song) => {
-            const qBadge = song.popularity ? getQuartileBadge(song.popularity) : null;
             return (
               <button
                 key={song.id}
@@ -177,13 +175,6 @@ export const SongSearchInput: React.FC<SongSearchInputProps> = ({
                     </div>
                   </div>
                 </div>
-
-                {qBadge && (
-                  <div className={`flex items-center space-x-1 text-[10px] font-bold px-2 py-0.5 rounded-full ml-2 flex-shrink-0 border ${qBadge.color}`}>
-                    <Sparkles className="w-3 h-3 fill-current" />
-                    <span>{qBadge.tier}</span>
-                  </div>
-                )}
               </button>
             );
           })}

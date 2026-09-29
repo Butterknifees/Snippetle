@@ -51,6 +51,7 @@ export default function Home() {
 
   // Countdown timer to IST midnight
   const [istCountdown, setIstCountdown] = useState<string>('');
+  const [istDate, setIstDate] = useState<string>(() => getISTDateString());
 
   // Stats
   const [stats, setStats] = useState({
@@ -79,6 +80,8 @@ export default function Home() {
       setIstCountdown(
         `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
       );
+      // Roll over to the new day's songs if the page stays open past IST midnight
+      setIstDate(getISTDateString());
     };
 
     updateCountdown();
@@ -108,9 +111,8 @@ export default function Home() {
     }
   }, []);
 
-  // Update Daily 3 Songs when category or genre changes (IST Midnight Seed)
+  // Update Daily 3 Songs when category, genre or IST date changes
   useEffect(() => {
-    const istDate = getISTDateString();
     const threeSongs = getDailyThreeSongs(category, hindiGenre, istDate);
     setDailyThreeSongs(threeSongs);
 
@@ -145,7 +147,7 @@ export default function Home() {
     }
 
     resetGameState();
-  }, [category, hindiGenre]);
+  }, [category, hindiGenre, istDate]);
 
   // Load Active Song Audio
   useEffect(() => {
@@ -220,7 +222,6 @@ export default function Home() {
     }
 
     if (mode === 'DAILY' && activeSong) {
-      const istDate = getISTDateString();
       const key = `snippetle_progress_${category}_${category === 'HINDI' ? hindiGenre : 'ALL'}_${istDate}`;
       
       setCompletedDailySongIds(prev => {

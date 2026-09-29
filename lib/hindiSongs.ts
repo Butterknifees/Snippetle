@@ -22,7 +22,7 @@ export function getSongsByCategoryAndGenre(category: SongCategory, genre: HindiG
   return HINDI_POP_DATABASE;
 }
 
-// High-Entropy FNV-1a Hash for uniform daily distribution without clustering
+// FNV-1a string hash, used only to seed the PRNG below
 function fnv1aHash(str: string): number {
   let hash = 2166136261;
   for (let i = 0; i < str.length; i++) {
@@ -32,63 +32,88 @@ function fnv1aHash(str: string): number {
   return hash >>> 0;
 }
 
-// Helper to calculate raw 3 song IDs for a specific date string without anti-repeat recursion
-function getRawDailySongIds(pool: Song[], category: SongCategory, genre: HindiGenre, dateStr: string): Set<string> {
-  const baseKey = `${category}_${genre}_${dateStr}`;
-  const pickedIds = new Set<string>();
-  let attempt = 0;
-
-  while (pickedIds.size < Math.min(3, pool.length)) {
-    const hashVal = fnv1aHash(`${baseKey}_attempt_${attempt}`);
-    const index = hashVal % pool.length;
-    pickedIds.add(pool[index].id);
-    attempt++;
-  }
-
-  return pickedIds;
+// Mulberry32 PRNG: well-mixed output for small modulo ranges
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-// Daily selection of 3 unique songs with a strict 7-day anti-repeat filter
-export function getDailyThreeSongs(category: SongCategory, genre: HindiGenre = 'POP', dateStr?: string): Song[] {
-  const fullPool = getSongsByCategoryAndGenre(category, genre);
-  const targetDateStr = dateStr || getISTDateString();
-  
-  // 1. Gather song IDs picked over the past 7 days to exclude them
-  const recent7DaysSongIds = new Set<string>();
-  const [year, month, day] = targetDateStr.split('-').map(Number);
-  const targetDateObj = new Date(Date.UTC(year, month - 1, day));
+const SONGS_PER_DAY = 3;
+const NO_REPEAT_DAYS = 7;
+const ROTATION_EPOCH_UTC = Date.UTC(2025, 0, 1);
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-  for (let offset = 1; offset <= 7; offset++) {
-    const prevDateObj = new Date(targetDateObj.getTime() - offset * 24 * 60 * 60 * 1000);
-    const prevYear = prevDateObj.getUTCFullYear();
-    const prevMonth = String(prevDateObj.getUTCMonth() + 1).padStart(2, '0');
-    const prevDay = String(prevDateObj.getUTCDate()).padStart(2, '0');
-    const prevDateStr = `${prevYear}-${prevMonth}-${prevDay}`;
+function daysSinceEpoch(dateStr: string): number {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return Math.max(0, Math.round((Date.UTC(year, month - 1, day) - ROTATION_EPOCH_UTC) / MS_PER_DAY));
+}
 
-    const prevIds = getRawDailySongIds(fullPool, category, genre, prevDateStr);
-    prevIds.forEach(id => recent7DaysSongIds.add(id));
-  }
+// Deterministic shuffled rotation: songs are dealt from a sequence of shuffled
+// "cycles" of the full pool, SONGS_PER_DAY per day. Every song plays once per
+// cycle before any song repeats, and each new cycle is ordered so that a song
+// from the end of the previous cycle can't come back within NO_REPEAT_DAYS
+// (or within 2/3 of the pool, for pools too small to cover that window).
+const cycleCache = new Map<string, Song[][]>();
 
-  // 2. Filter pool to exclude songs played in the last 7 days
-  const eligiblePool = fullPool.filter(song => !recent7DaysSongIds.has(song.id));
-  const activePool = eligiblePool.length >= 3 ? eligiblePool : fullPool;
+function getRotationCycles(pool: Song[], seedKey: string, cyclesNeeded: number): Song[][] {
+  const ordered = [...pool].sort((a, b) => a.id.localeCompare(b.id));
+  const cacheKey = `${seedKey}_${ordered.map(s => s.id).join(',')}`;
+  const cycles = cycleCache.get(cacheKey) ?? [];
 
-  // 3. Pick 3 songs for targetDateStr from activePool
-  const baseKey = `${category}_${genre}_${targetDateStr}`;
-  const selected: Song[] = [];
-  const pickedIndices = new Set<number>();
-  let attempt = 0;
-
-  while (selected.length < Math.min(3, activePool.length)) {
-    const hashVal = fnv1aHash(`${baseKey}_attempt_${attempt}`);
-    const index = hashVal % activePool.length;
-    
-    if (!pickedIndices.has(index)) {
-      pickedIndices.add(index);
-      selected.push(activePool[index]);
+  const n = ordered.length;
+  // Minimum number of plays between two plays of the same song
+  const minGap = Math.min(NO_REPEAT_DAYS * SONGS_PER_DAY, Math.max(SONGS_PER_DAY, Math.floor((n * 2) / 3)));
+  while (cycles.length < cyclesNeeded) {
+    const rand = mulberry32(fnv1aHash(`${seedKey}_cycle_${cycles.length}`));
+    const shuffled = [...ordered];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-    attempt++;
+
+    const prev = cycles[cycles.length - 1];
+    if (!prev) {
+      cycles.push(shuffled);
+      continue;
+    }
+
+    // Greedily take the next shuffled song that is far enough from its previous play.
+    // A song at position p of the previous cycle is n - p + q plays away at position q.
+    const prevPos = new Map(prev.map((s, i) => [s.id, i]));
+    const remaining = [...shuffled];
+    const next: Song[] = [];
+    for (let q = 0; q < n; q++) {
+      let pick = remaining.findIndex(s => n - prevPos.get(s.id)! + q >= minGap);
+      if (pick === -1) pick = 0;
+      next.push(remaining.splice(pick, 1)[0]);
+    }
+    cycles.push(next);
   }
 
+  cycleCache.set(cacheKey, cycles);
+  return cycles;
+}
+
+// Daily selection of 3 unique songs; a song only repeats after the whole pool has been played
+export function getDailyThreeSongs(category: SongCategory, genre: HindiGenre = 'POP', dateStr?: string): Song[] {
+  const pool = getSongsByCategoryAndGenre(category, genre);
+  if (pool.length === 0) return [];
+
+  const targetDateStr = dateStr || getISTDateString();
+  const seedKey = `${category}_${category === 'HINDI' ? genre : 'ALL'}`;
+  const count = Math.min(SONGS_PER_DAY, pool.length);
+  const start = daysSinceEpoch(targetDateStr) * SONGS_PER_DAY;
+  const cycles = getRotationCycles(pool, seedKey, Math.floor((start + count - 1) / pool.length) + 1);
+
+  const selected: Song[] = [];
+  for (let pos = start; pos < start + count; pos++) {
+    selected.push(cycles[Math.floor(pos / pool.length)][pos % pool.length]);
+  }
   return selected;
 }

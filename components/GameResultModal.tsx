@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { X, Play, Pause, Share2, Check, RefreshCw, Trophy, Clock, Sparkles } from 'lucide-react';
-import { Song, GuessAttempt, SongCategory, HindiGenre, getQuartileBadge } from '../lib/types';
+import { X, Play, Pause, Share2, Check, RefreshCw, Trophy, Clock } from 'lucide-react';
+import { Song, GuessAttempt, SongCategory, HindiGenre } from '../lib/types';
 
 interface GameResultModalProps {
   isOpen: boolean;
@@ -92,8 +92,6 @@ export const GameResultModal: React.FC<GameResultModalProps> = ({
     }
   };
 
-  const quartileBadge = targetSong.popularity ? getQuartileBadge(targetSong.popularity) : null;
-
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
       <div className="bg-songless-dark border border-songless-tile w-full max-w-md rounded-3xl p-6 shadow-2xl relative space-y-5 text-center">
@@ -146,14 +144,6 @@ export const GameResultModal: React.FC<GameResultModalProps> = ({
               <p className="text-xs text-songless-subtext mt-0.5">
                 From <span className="text-white italic">{targetSong.movieOrAlbum}</span> ({targetSong.year})
               </p>
-            )}
-
-            {/* Quartile Popularity Badge */}
-            {quartileBadge && (
-              <div className={`inline-flex items-center space-x-1.5 text-[11px] font-bold px-3 py-1 rounded-full mt-2 border ${quartileBadge.color}`}>
-                <Sparkles className="w-3.5 h-3.5 fill-current" />
-                <span>Popularity: {quartileBadge.label}</span>
-              </div>
             )}
           </div>
 

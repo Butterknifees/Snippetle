@@ -69,7 +69,6 @@ export function filterHindiTracks(spotifyTracks: any[], category: SongCategory =
       coverUrl: track.album && track.album.images && track.album.images[0] ? track.album.images[0].url : undefined,
       spotifyUri: track.uri,
       spotifyId: track.id,
-      popularity: track.popularity || 90,
       category
     };
   });

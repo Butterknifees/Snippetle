@@ -1,8 +1,6 @@
 export type SongCategory = 'HINDI' | 'ENGLISH';
 export type HindiGenre = 'POP' | 'RETRO' | 'RAP';
 
-export type PopularityTier = 'Q1' | 'Q2' | 'Q3' | 'Q4';
-
 export interface Song {
   id: string;
   title: string;
@@ -11,8 +9,6 @@ export interface Song {
   year?: number;
   audioUrl: string;
   coverUrl?: string;
-  popularity?: number; // 0 to 100
-  tier?: PopularityTier;
   category: SongCategory;
   genre?: string;
   spotifyUri?: string;
@@ -57,17 +53,4 @@ export function getISTDateString(): string {
   const day = String(istDate.getDate()).padStart(2, '0');
   
   return `${year}-${month}-${day}`;
-}
-
-// Accurate Quartile Badge Calculation
-export function getQuartileBadge(popularity: number = 75): { tier: PopularityTier; label: string; color: string } {
-  if (popularity >= 80) {
-    return { tier: 'Q1', label: '🔥 Quartile 1 (Top 25% Hit)', color: 'text-amber-400 bg-amber-400/10 border-amber-400/30' };
-  } else if (popularity >= 65) {
-    return { tier: 'Q2', label: '✨ Quartile 2 (Top 50% Chart)', color: 'text-purple-400 bg-purple-400/10 border-purple-400/30' };
-  } else if (popularity >= 45) {
-    return { tier: 'Q3', label: '🎵 Quartile 3 (Top 75% Track)', color: 'text-blue-400 bg-blue-400/10 border-blue-400/30' };
-  } else {
-    return { tier: 'Q4', label: '🎧 Quartile 4 (Indie / Deep Cut)', color: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30' };
-  }
 }

@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Play, Pause, FastForward, Sparkles } from 'lucide-react';
-import { GUESS_DURATIONS, Song, getQuartileBadge } from '../lib/types';
+import { Play, Pause, FastForward } from 'lucide-react';
+import { GUESS_DURATIONS, Song } from '../lib/types';
 
 interface AudioPlayerControlsProps {
   currentStep: number;
@@ -28,17 +28,10 @@ export const AudioPlayerControls: React.FC<AudioPlayerControlsProps> = ({
   const currentDuration = GUESS_DURATIONS[Math.min(currentStep, GUESS_DURATIONS.length - 1)];
   const maxDuration = 16.0;
 
-  const quartileBadge = activeSong?.popularity ? getQuartileBadge(activeSong.popularity) : null;
-
   return (
     <div className="w-full max-w-xl mx-auto bg-songless-tile/40 backdrop-blur-xl border border-songless-tile/80 p-5 rounded-3xl space-y-4 shadow-2xl">
-      {/* Quartile Popularity Header Badge */}
-      {quartileBadge && (
-        <div className="flex items-center justify-between text-xs font-bold px-1">
-          <div className={`flex items-center space-x-1.5 px-3 py-1 rounded-full border ${quartileBadge.color}`}>
-            <Sparkles className="w-3.5 h-3.5 fill-current" />
-            <span>Popularity Tier: {quartileBadge.label}</span>
-          </div>
+      {activeSong && (
+        <div className="flex items-center justify-end text-xs font-bold px-1">
           <span className="text-songless-subtext font-mono">Step {Math.min(currentStep + 1, 6)} of 6</span>
         </div>
       )}
